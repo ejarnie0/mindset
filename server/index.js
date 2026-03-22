@@ -57,8 +57,9 @@ function getWinner(room) {
 }
 
 function getPublicRoom(room) {
+  const { timerInterval, timerTimeout, ...serializable } = room;
   return {
-    ...room,
+    ...serializable,
     winner: getWinner(room),
     submittedCount: getSubmittedCount(room),
     totalGuessers: getTotalGuessers(room),
@@ -279,9 +280,12 @@ function finishRound(room) {
     };
   });
 
+  const answeringPlayerPoints = guessResults.filter((r) => !r.wasCorrect).length;
+
   room.round.results = {
     correctAnswerIndex: correct,
     guessResults,
+    answeringPlayerPoints,
   };
 
   emitRoom(room);
