@@ -1,0 +1,17 @@
+[
+  {
+    "id": 1,
+    "prompt": "Which superpower would you secretly want most?",
+    "options": ["Invisibility", "Flying", "Mind reading", "Teleportation"]
+  },
+  {
+    "id": 2,
+    "prompt": "What sounds like your ideal weekend?",
+    "options": ["Staying in", "Going out", "Road trip", "Sleeping all day"]
+  },
+  {
+    "id": 3,
+    "prompt": "Which food would you never get tired of?",
+    "options": ["Pizza", "Pasta", "Fries", "Ice cream"]
+  }
+]
