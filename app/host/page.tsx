@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { motion } from "motion/react";
 import { socket } from "../../lib/socket";
 
 export default function HostPage() {
@@ -51,6 +52,7 @@ export default function HostPage() {
 
   const getStatusLabel = () => {
     if (!room) return "";
+    if (room.winner) return `${room.winner.name} wins!`;
     if (room.status === "lobby") return "Waiting in lobby";
     if (room.status === "answering") {
       return `${answeringPlayer?.name || "A player"} is answering`;
@@ -64,14 +66,31 @@ export default function HostPage() {
     return room.status;
   };
 
+  const getSubmissionLabel = () => {
+    if (!room?.round) return "No active round";
+
+    if (room.status === "answering") {
+      return `${room.submittedCount || 0} / 1 answered`;
+    }
+
+    if (room.status === "guessing" || room.status === "results") {
+      return `${room.submittedCount || 0} / ${room.totalGuessers || 0} guessed`;
+    }
+
+    return "";
+  };
+
   return (
     <main className="min-h-screen bg-[#97E7F5] p-6">
       {!room ? (
         <div className="min-h-screen flex items-center justify-center">
           <div className="rounded-[32px] border-4 border-[#01377D] bg-white p-8 shadow-[0_14px_0_#01377D] text-center max-w-xl w-full">
             <h1 className="text-5xl font-black text-[#01377D] mb-3">Mindset</h1>
-            <p className="text-[#01377D] text-lg font-semibold mb-8">
+            <p className="text-[#01377D] text-lg font-semibold mb-4">
               Host the game and let everyone join on their phones.
+            </p>
+            <p className="text-[#01377D] font-bold mb-8">
+              Open this laptop’s Wi-Fi IP on other devices.
             </p>
 
             <button
@@ -107,6 +126,24 @@ export default function HostPage() {
                 )}
               </div>
             </div>
+
+            <div className="mb-4 rounded-2xl bg-[#01377D] px-5 py-4 text-white">
+              <p className="text-sm font-bold uppercase tracking-[0.18em] opacity-80">
+                Submission Progress
+              </p>
+              <p className="mt-1 text-2xl font-black">{getSubmissionLabel()}</p>
+            </div>
+
+            {room.winner && (
+              <div className="mb-6 rounded-3xl bg-[#26B170] p-5 text-white">
+                <p className="text-sm font-bold uppercase tracking-[0.18em]">
+                  Winner
+                </p>
+                <p className="mt-2 text-3xl font-black">
+                  {room.winner.name} reached 10 points
+                </p>
+              </div>
+            )}
 
             <div className="mb-6 rounded-3xl border-2 border-[#97E7F5] bg-[#EAFBFE] p-5">
               <p className="mb-2 text-sm font-bold uppercase tracking-[0.18em] text-[#01377D]">
@@ -150,7 +187,11 @@ export default function HostPage() {
             <div className="flex flex-wrap gap-4">
               <button
                 onClick={startRound}
-                disabled={room.status !== "lobby"}
+                disabled={
+                  room.status !== "lobby" ||
+                  room.winner ||
+                  room.players.filter((p: any) => !p.isHost).length < 2
+                }
                 className="rounded-2xl bg-[#009DD1] px-6 py-4 text-lg font-black text-white shadow-[0_6px_0_#01377D] transition hover:-translate-y-0.5 active:translate-y-1 active:shadow-[0_2px_0_#01377D] disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
               >
                 Start Round
@@ -164,14 +205,57 @@ export default function HostPage() {
               </button>
             </div>
 
-            {room.status === "results" && room.round && (
-              <div className="mt-6 rounded-3xl bg-[#7ED348] p-5 text-[#01377D]">
-                <p className="text-sm font-bold uppercase tracking-[0.18em]">
-                  Correct Answer
-                </p>
-                <p className="mt-2 text-3xl font-black">
-                  {room.round.question.options[room.round.chosenAnswerIndex]}
-                </p>
+            {room.status === "results" && room.round?.results && (
+              <div className="mt-6 space-y-4">
+                <div className="rounded-3xl bg-[#7ED348] p-5 text-[#01377D]">
+                  <p className="text-sm font-bold uppercase tracking-[0.18em]">
+                    Correct Answer
+                  </p>
+                  <p className="mt-2 text-3xl font-black">
+                    {room.round.question.options[room.round.chosenAnswerIndex]}
+                  </p>
+                </div>
+
+                <div className="rounded-3xl border-2 border-[#97E7F5] bg-white p-5">
+                  <p className="mb-3 text-sm font-bold uppercase tracking-[0.18em] text-[#01377D]">
+                    Round Results
+                  </p>
+
+                  <div className="space-y-3">
+                    {room.round.results.guessResults.map((result: any) => (
+                      <div
+                        key={result.playerId}
+                        className={`rounded-2xl p-4 font-bold ${
+                          result.wasCorrect
+                            ? "bg-[#26B170] text-white"
+                            : "bg-[#EAFBFE] text-[#01377D]"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p>{result.name}</p>
+                            <p className="text-sm opacity-80">
+                              Guessed:{" "}
+                              {typeof result.guessIndex === "number"
+                                ? room.round.question.options[result.guessIndex]
+                                : "No guess"}
+                            </p>
+                          </div>
+                          <div>
+                            {result.wasCorrect ? "+1" : "+0"}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    <div className="rounded-2xl bg-[#01377D] p-4 text-white font-bold">
+                      {answeringPlayer?.name || "Answering player"} fooled{" "}
+                      {room.round.results.answeringPlayerPoints} player
+                      {room.round.results.answeringPlayerPoints === 1 ? "" : "s"}{" "}
+                      and gets +{room.round.results.answeringPlayerPoints}
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </section>
@@ -181,8 +265,12 @@ export default function HostPage() {
 
             <div className="space-y-3">
               {sortedPlayers.map((player: any, index: number) => (
-                <div
+                <motion.div
+                  layout
                   key={player.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.22 }}
                   className="flex items-center justify-between rounded-2xl bg-white/10 p-4"
                 >
                   <div>
@@ -192,10 +280,13 @@ export default function HostPage() {
                     </p>
                   </div>
 
-                  <div className="rounded-full bg-[#7ED348] px-4 py-2 font-black text-[#01377D]">
+                  <motion.div
+                    layout
+                    className="rounded-full bg-[#7ED348] px-4 py-2 font-black text-[#01377D]"
+                  >
                     {player.score}
-                  </div>
-                </div>
+                  </motion.div>
+                </motion.div>
               ))}
             </div>
 
@@ -206,9 +297,16 @@ export default function HostPage() {
 
               <div className="space-y-2">
                 {room.players.map((player: any) => (
-                  <div key={player.id} className="font-semibold">
+                  <motion.div
+                    layout
+                    key={player.id}
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="font-semibold"
+                  >
                     {player.name}
-                  </div>
+                  </motion.div>
                 ))}
               </div>
             </div>

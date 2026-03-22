@@ -13,13 +13,58 @@ const io = new Server(server, {
 });
 
 const rooms = {};
+const WIN_SCORE = 10;
 
 function makeCode() {
   return Math.random().toString(36).substring(2, 6).toUpperCase();
 }
 
 function getPublicRoom(room) {
-  return room;
+  const winner = room.players.find((p) => p.score >= WIN_SCORE) || null;
+
+  return {
+    ...room,
+    winner,
+    submittedCount: getSubmittedCount(room),
+    totalGuessers: getTotalGuessers(room),
+  };
+}
+
+function pickRandomQuestion() {
+  return questions[Math.floor(Math.random() * questions.length)];
+}
+
+function pickNextAnsweringPlayer(room) {
+  const players = room.players.filter((p) => !p.isHost);
+  if (players.length === 0) return null;
+
+  if (typeof room.lastAnsweringIndex !== "number") {
+    room.lastAnsweringIndex = -1;
+  }
+
+  room.lastAnsweringIndex = (room.lastAnsweringIndex + 1) % players.length;
+  return players[room.lastAnsweringIndex];
+}
+
+function getTotalGuessers(room) {
+  if (!room.round) return 0;
+  return room.players.filter(
+    (p) => !p.isHost && p.id !== room.round.answeringPlayerId
+  ).length;
+}
+
+function getSubmittedCount(room) {
+  if (!room.round) return 0;
+
+  if (room.status === "answering") {
+    return room.round.chosenAnswerIndex !== null ? 1 : 0;
+  }
+
+  if (room.status === "guessing" || room.status === "results") {
+    return Object.keys(room.round.guesses).length;
+  }
+
+  return 0;
 }
 
 function clearRoomTimer(room) {
@@ -38,6 +83,9 @@ function startPhaseTimer(room, seconds, onExpire) {
 
   room.timerInterval = setInterval(() => {
     room.timeLeft -= 1;
+
+    if (room.timeLeft < 0) room.timeLeft = 0;
+
     io.to(room.code).emit("room:update", getPublicRoom(room));
 
     if (room.timeLeft <= 0) {
@@ -53,16 +101,6 @@ function startPhaseTimer(room, seconds, onExpire) {
   }, seconds * 1000);
 }
 
-function pickRandomQuestion() {
-  return questions[Math.floor(Math.random() * questions.length)];
-}
-
-function pickNextAnsweringPlayer(room) {
-  const players = room.players.filter((p) => !p.isHost);
-  if (players.length === 0) return null;
-  return players[Math.floor(Math.random() * players.length)];
-}
-
 function finishRound(room) {
   if (!room.round) return;
 
@@ -75,14 +113,22 @@ function finishRound(room) {
     (p) => !p.isHost && p.id !== room.round.answeringPlayerId
   );
 
-  for (const player of room.players) {
-    if (player.id === room.round.answeringPlayerId) continue;
-    if (player.isHost) continue;
+  const results = nonAnsweringPlayers.map((player) => {
+    const guess = room.round.guesses[player.id];
+    const wasCorrect = guess === correct;
 
-    if (room.round.guesses[player.id] === correct) {
+    if (wasCorrect) {
       player.score += 1;
     }
-  }
+
+    return {
+      playerId: player.id,
+      name: player.name,
+      guessIndex: guess,
+      wasCorrect,
+      pointsGained: wasCorrect ? 1 : 0,
+    };
+  });
 
   const fooledCount = nonAnsweringPlayers.filter(
     (p) => room.round.guesses[p.id] !== correct
@@ -96,11 +142,17 @@ function finishRound(room) {
     answeringPlayer.score += fooledCount;
   }
 
+  room.round.results = {
+    correctAnswerIndex: correct,
+    guessResults: results,
+    answeringPlayerPoints: fooledCount,
+  };
+
   clearRoomTimer(room);
 }
 
 io.on("connection", (socket) => {
-  console.log("A user connected:", socket.id);
+  console.log("connected:", socket.id);
 
   socket.on("host:create-room", ({ hostName }, callback) => {
     const code = makeCode();
@@ -121,6 +173,7 @@ io.on("connection", (socket) => {
       timerInterval: null,
       timerTimeout: null,
       timeLeft: null,
+      lastAnsweringIndex: -1,
     };
 
     socket.join(code);
@@ -134,15 +187,12 @@ io.on("connection", (socket) => {
     const room = rooms[code];
     if (!room) return callback({ ok: false, error: "Room not found" });
 
-    const existingPlayer = room.players.find((p) => p.id === socket.id);
-    if (!existingPlayer) {
-      room.players.push({
-        id: socket.id,
-        name,
-        score: 0,
-        isHost: false,
-      });
-    }
+    room.players.push({
+      id: socket.id,
+      name,
+      score: 0,
+      isHost: false,
+    });
 
     socket.join(code);
     socket.data.roomCode = code;
@@ -158,12 +208,15 @@ io.on("connection", (socket) => {
     }
 
     socket.join(code);
+    socket.data.roomCode = code;
     callback?.({ ok: true, room: getPublicRoom(room) });
   });
 
   socket.on("game:start-round", ({ code }) => {
     const room = rooms[code];
     if (!room) return;
+    if (room.players.filter((p) => !p.isHost).length < 2) return;
+    if (room.players.some((p) => p.score >= WIN_SCORE)) return;
 
     const answeringPlayer = pickNextAnsweringPlayer(room);
     if (!answeringPlayer) return;
@@ -177,6 +230,7 @@ io.on("connection", (socket) => {
       chosenAnswerIndex: null,
       guesses: {},
       revealed: false,
+      results: null,
     };
 
     io.to(code).emit("room:update", getPublicRoom(room));
@@ -191,8 +245,9 @@ io.on("connection", (socket) => {
       }
 
       room.status = "guessing";
+      io.to(code).emit("room:update", getPublicRoom(room));
 
-      startPhaseTimer(room, 20, () => {
+      startPhaseTimer(room, 15, () => {
         if (!room.round) return;
         finishRound(room);
       });
@@ -202,23 +257,25 @@ io.on("connection", (socket) => {
   socket.on("player:submit-answer", ({ code, answerIndex }) => {
     const room = rooms[code];
     if (!room || !room.round) return;
+    if (room.status !== "answering") return;
     if (socket.id !== room.round.answeringPlayerId) return;
     if (room.round.chosenAnswerIndex !== null) return;
 
     room.round.chosenAnswerIndex = answerIndex;
     room.status = "guessing";
 
-    startPhaseTimer(room, 20, () => {
+    io.to(code).emit("room:update", getPublicRoom(room));
+
+    startPhaseTimer(room, 15, () => {
       if (!room.round) return;
       finishRound(room);
     });
-
-    io.to(code).emit("room:update", getPublicRoom(room));
   });
 
   socket.on("player:submit-guess", ({ code, guessIndex }) => {
     const room = rooms[code];
     if (!room || !room.round) return;
+    if (room.status !== "guessing") return;
     if (socket.id === room.round.answeringPlayerId) return;
     if (room.round.guesses[socket.id] !== undefined) return;
 
@@ -251,8 +308,6 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    console.log("A user disconnected:", socket.id);
-
     for (const code in rooms) {
       const room = rooms[code];
       room.players = room.players.filter((p) => p.id !== socket.id);
