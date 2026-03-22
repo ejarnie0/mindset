@@ -85,7 +85,6 @@ function startCountdown(room, seconds, onExpire) {
 
   room.timerInterval = setInterval(() => {
     room.timeLeft -= 1;
-
     if (room.timeLeft < 0) room.timeLeft = 0;
     emitRoom(room);
 
@@ -148,13 +147,9 @@ function rebindPlayerSocket(room, oldId, newId) {
   if (oldId === newId) return;
 
   const player = room.players.find((p) => p.id === oldId);
-  if (player) {
-    player.id = newId;
-  }
+  if (player) player.id = newId;
 
-  if (room.hostId === oldId) {
-    room.hostId = newId;
-  }
+  if (room.hostId === oldId) room.hostId = newId;
 
   if (room.answerOrder) {
     room.answerOrder = room.answerOrder.map((id) => (id === oldId ? newId : id));
@@ -178,15 +173,22 @@ function rebindPlayerSocket(room, oldId, newId) {
   }
 }
 
-function ensurePlayerBound(room, socket, playerName) {
+function ensurePlayerBound(room, socket, playerId, playerName) {
   let player = room.players.find((p) => p.id === socket.id);
   if (player) return player;
+
+  if (playerId) {
+    const byOldId = room.players.find((p) => !p.isHost && p.id === playerId);
+    if (byOldId) {
+      rebindPlayerSocket(room, byOldId.id, socket.id);
+      return byOldId;
+    }
+  }
 
   if (playerName) {
     const byName = room.players.find((p) => !p.isHost && p.name === playerName);
     if (byName) {
-      const oldId = byName.id;
-      rebindPlayerSocket(room, oldId, socket.id);
+      rebindPlayerSocket(room, byName.id, socket.id);
       return byName;
     }
   }
@@ -253,7 +255,6 @@ function finishRound(room) {
   if (!room.round) return;
 
   clearRoomTimer(room);
-
   room.status = "results";
   room.round.revealed = true;
 
@@ -267,9 +268,7 @@ function finishRound(room) {
     const guessIndex = room.round.guesses[player.id];
     const wasCorrect = guessIndex === correct;
 
-    if (wasCorrect) {
-      player.score += 1;
-    }
+    if (wasCorrect) player.score += 1;
 
     return {
       playerId: player.id,
@@ -352,17 +351,21 @@ io.on("connection", (socket) => {
     emitRoom(room);
   });
 
-  socket.on("room:get-state", ({ code, playerName }, callback) => {
+  socket.on("room:get-state", ({ code, playerId, playerName }, callback) => {
     const room = rooms[code];
-    if (!room) {
-      return callback?.({ ok: false, error: "Room not found" });
-    }
+    if (!room) return callback?.({ ok: false, error: "Room not found" });
 
     socket.join(code);
     socket.data.roomCode = code;
 
-    ensurePlayerBound(room, socket, playerName);
-    callback?.({ ok: true, room: getPublicRoom(room) });
+    const player = ensurePlayerBound(room, socket, playerId, playerName);
+
+    callback?.({
+      ok: true,
+      room: getPublicRoom(room),
+      playerId: player?.id || null,
+    });
+
     emitRoom(room);
   });
 
@@ -376,31 +379,41 @@ io.on("connection", (socket) => {
     startNextRound(room);
   });
 
-  socket.on("player:submit-answer", ({ code, answerIndex, playerName }) => {
+  socket.on("player:submit-answer", ({ code, answerIndex, playerId, playerName }, callback) => {
     const room = rooms[code];
-    if (!room || !room.round) return;
-    if (room.status !== "answering") return;
+    if (!room || !room.round) return callback?.({ ok: false, reason: "no-room-or-round" });
+    if (room.status !== "answering") return callback?.({ ok: false, reason: "wrong-phase" });
 
-    const player = ensurePlayerBound(room, socket, playerName);
-    if (!player) return;
-    if (player.id !== room.round.answeringPlayerId) return;
-    if (room.round.chosenAnswerIndex !== null) return;
+    const player = ensurePlayerBound(room, socket, playerId, playerName);
+    if (!player) return callback?.({ ok: false, reason: "player-not-found" });
+    if (player.id !== room.round.answeringPlayerId) {
+      return callback?.({ ok: false, reason: "not-answering-player" });
+    }
+    if (room.round.chosenAnswerIndex !== null) {
+      return callback?.({ ok: false, reason: "already-answered" });
+    }
 
     room.round.chosenAnswerIndex = answerIndex;
+    callback?.({ ok: true });
     moveToGuessing(room);
   });
 
-  socket.on("player:submit-guess", ({ code, guessIndex, playerName }) => {
+  socket.on("player:submit-guess", ({ code, guessIndex, playerId, playerName }, callback) => {
     const room = rooms[code];
-    if (!room || !room.round) return;
-    if (room.status !== "guessing") return;
+    if (!room || !room.round) return callback?.({ ok: false, reason: "no-room-or-round" });
+    if (room.status !== "guessing") return callback?.({ ok: false, reason: "wrong-phase" });
 
-    const player = ensurePlayerBound(room, socket, playerName);
-    if (!player) return;
-    if (player.id === room.round.answeringPlayerId) return;
-    if (room.round.guesses[player.id] !== undefined) return;
+    const player = ensurePlayerBound(room, socket, playerId, playerName);
+    if (!player) return callback?.({ ok: false, reason: "player-not-found" });
+    if (player.id === room.round.answeringPlayerId) {
+      return callback?.({ ok: false, reason: "answering-player-cannot-guess" });
+    }
+    if (room.round.guesses[player.id] !== undefined) {
+      return callback?.({ ok: false, reason: "already-guessed" });
+    }
 
     room.round.guesses[player.id] = guessIndex;
+    callback?.({ ok: true });
 
     const guessers = room.players.filter(
       (p) => !p.isHost && p.id !== room.round.answeringPlayerId
@@ -412,9 +425,7 @@ io.on("connection", (socket) => {
 
     emitRoom(room);
 
-    if (allGuessed) {
-      finishRound(room);
-    }
+    if (allGuessed) finishRound(room);
   });
 
   socket.on("game:next-round", ({ code }) => {
@@ -426,9 +437,7 @@ io.on("connection", (socket) => {
     room.status = "lobby";
     emitRoom(room);
 
-    if (!getWinner(room)) {
-      startNextRound(room);
-    }
+    if (!getWinner(room)) startNextRound(room);
   });
 
   socket.on("disconnect", () => {

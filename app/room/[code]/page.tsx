@@ -6,7 +6,13 @@ import { useParams } from "next/navigation";
 
 export default function PlayerRoomPage() {
   const params = useParams();
-  const code = useMemo(() => String(params.code).toUpperCase(), [params.code]);
+
+  const code = useMemo(() => {
+    const raw = params?.code;
+    return Array.isArray(raw)
+      ? raw[0]?.toUpperCase() ?? ""
+      : String(raw ?? "").toUpperCase();
+  }, [params]);
 
   const [room, setRoom] = useState<any>(null);
   const [playerId, setPlayerId] = useState<string | null>(null);
@@ -16,6 +22,8 @@ export default function PlayerRoomPage() {
   const [hasSubmitted, setHasSubmitted] = useState(false);
 
   useEffect(() => {
+    if (!code) return;
+
     const savedPlayerId = localStorage.getItem("playerId");
     const savedPlayerName = localStorage.getItem("playerName");
 
@@ -27,14 +35,27 @@ export default function PlayerRoomPage() {
     }
 
     const requestState = () => {
-      socket.emit("room:get-state", { code, playerName }, (res: any) => {
-        if (res?.ok) {
-          setRoom(res.room);
-          setStatusMessage("");
-        } else {
-          setStatusMessage(res?.error || "Room not found");
+      socket.emit(
+        "room:get-state",
+        {
+          code,
+          playerId: savedPlayerId,
+          playerName: savedPlayerName,
+        },
+        (res: any) => {
+          if (res?.ok) {
+            setRoom(res.room);
+            setStatusMessage("");
+
+            if (res.playerId) {
+              localStorage.setItem("playerId", res.playerId);
+              setPlayerId(res.playerId);
+            }
+          } else {
+            setStatusMessage(res?.error || "Room not found");
+          }
         }
-      });
+      );
     };
 
     const handleConnect = () => {
@@ -91,20 +112,37 @@ export default function PlayerRoomPage() {
   const submitSelection = () => {
     if (selectedIndex === null || hasSubmitted || !room?.round) return;
 
-    setHasSubmitted(true);
+    const payload = {
+      code,
+      playerId: effectivePlayerId,
+      playerName,
+    };
 
     if (isAnsweringPlayer && room.status === "answering") {
-      socket.emit("player:submit-answer", {
-      code,
-      answerIndex: selectedIndex,
-      playerName,
-    });
+      socket.emit(
+        "player:submit-answer",
+        { ...payload, answerIndex: selectedIndex },
+        (res: any) => {
+          if (res?.ok) {
+            setHasSubmitted(true);
+          } else {
+            console.log("submit-answer rejected:", res?.reason);
+          }
+        }
+      );
     } else if (!isAnsweringPlayer && room.status === "guessing") {
-      socket.emit("player:submit-guess", {
-      code,
-      guessIndex: selectedIndex,
-      playerName,
-    });
+      socket.emit(
+        "player:submit-guess",
+        { ...payload, guessIndex: selectedIndex },
+        (res: any) => {
+          if (res?.ok) {
+            setHasSubmitted(true);
+          } else {
+            console.log("submit-guess rejected:", res?.reason);
+          }
+        }
+      );
+    }
   };
 
   const timerPercent =

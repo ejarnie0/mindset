@@ -4,6 +4,22 @@ import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import { socket } from "../../lib/socket";
 
+// ✅ Reusable dedup helper — keeps the LAST seen version of each player
+function dedupePlayers<T extends { id: string }>(players: T[]): T[] {
+  return Array.from(
+    new Map(players.map((p) => [p.id, p])).values()
+  );
+}
+
+// ✅ Normalize every room object before it touches state
+function normalizeRoom(room: any) {
+  if (!room) return room;
+  return {
+    ...room,
+    players: dedupePlayers(room.players ?? []),
+  };
+}
+
 export default function HostPage() {
   const [room, setRoom] = useState<any>(null);
 
@@ -13,7 +29,8 @@ export default function HostPage() {
     }
 
     const handleRoomUpdate = (updatedRoom: any) => {
-      setRoom(updatedRoom);
+      // ✅ Deduplicate before storing — nothing downstream ever sees dupes
+      setRoom(normalizeRoom(updatedRoom));
     };
 
     socket.on("room:update", handleRoomUpdate);
@@ -26,7 +43,8 @@ export default function HostPage() {
   const createRoom = () => {
     socket.emit("host:create-room", { hostName: "Host" }, (res: any) => {
       if (res.ok) {
-        setRoom(res.room);
+        // ✅ Also normalize the initial room from the callback
+        setRoom(normalizeRoom(res.room));
       }
     });
   };
@@ -43,7 +61,10 @@ export default function HostPage() {
 
   const sortedPlayers = useMemo(() => {
     if (!room?.players) return [];
-    return [...room.players].sort((a, b) => b.score - a.score);
+    // ✅ Defensive dedup here too — belt-and-suspenders
+    return dedupePlayers([...room.players]).sort(
+      (a: any, b: any) => b.score - a.score
+    );
   }, [room]);
 
   const answeringPlayer = room?.players?.find(
@@ -57,26 +78,19 @@ export default function HostPage() {
     if (room.status === "answering") {
       return `${answeringPlayer?.name || "A player"} is answering`;
     }
-    if (room.status === "guessing") {
-      return "Players are guessing";
-    }
-    if (room.status === "results") {
-      return "Round results";
-    }
+    if (room.status === "guessing") return "Players are guessing";
+    if (room.status === "results") return "Round results";
     return room.status;
   };
 
   const getSubmissionLabel = () => {
     if (!room?.round) return "No active round";
-
     if (room.status === "answering") {
       return `${room.submittedCount || 0} / 1 answered`;
     }
-
     if (room.status === "guessing" || room.status === "results") {
       return `${room.submittedCount || 0} / ${room.totalGuessers || 0} guessed`;
     }
-
     return "";
   };
 
@@ -90,7 +104,7 @@ export default function HostPage() {
               Host the game and let everyone join on their phones.
             </p>
             <p className="text-[#01377D] font-bold mb-8">
-              Open this laptop’s Wi-Fi IP on other devices.
+              Open this laptop's Wi-Fi IP on other devices.
             </p>
 
             <button
@@ -119,11 +133,12 @@ export default function HostPage() {
                   {getStatusLabel()}
                 </div>
 
-                {typeof room.timeLeft === "number" && room.status !== "results" && (
-                  <div className="rounded-full bg-[#01377D] px-5 py-3 font-black text-white">
-                    ⏱ {room.timeLeft}s
-                  </div>
-                )}
+                {typeof room.timeLeft === "number" &&
+                  room.status !== "results" && (
+                    <div className="rounded-full bg-[#01377D] px-5 py-3 font-black text-white">
+                      ⏱ {room.timeLeft}s
+                    </div>
+                  )}
               </div>
             </div>
 
@@ -161,24 +176,26 @@ export default function HostPage() {
                   </p>
 
                   <div className="grid gap-2 sm:grid-cols-2">
-                    {room.round.question.options.map((option: string, index: number) => {
-                      const isCorrect =
-                        room.status === "results" &&
-                        index === room.round.chosenAnswerIndex;
+                    {room.round.question.options.map(
+                      (option: string, index: number) => {
+                        const isCorrect =
+                          room.status === "results" &&
+                          index === room.round.chosenAnswerIndex;
 
-                      return (
-                        <div
-                          key={index}
-                          className={`rounded-2xl border-2 p-4 font-bold ${
-                            isCorrect
-                              ? "border-[#26B170] bg-[#26B170] text-white"
-                              : "border-[#97E7F5] bg-white text-[#01377D]"
-                          }`}
-                        >
-                          {option}
-                        </div>
-                      );
-                    })}
+                        return (
+                          <div
+                            key={index}
+                            className={`rounded-2xl border-2 p-4 font-bold ${
+                              isCorrect
+                                ? "border-[#26B170] bg-[#26B170] text-white"
+                                : "border-[#97E7F5] bg-white text-[#01377D]"
+                            }`}
+                          >
+                            {option}
+                          </div>
+                        );
+                      }
+                    )}
                   </div>
                 </>
               )}
@@ -241,9 +258,7 @@ export default function HostPage() {
                                 : "No guess"}
                             </p>
                           </div>
-                          <div>
-                            {result.wasCorrect ? "+1" : "+0"}
-                          </div>
+                          <div>{result.wasCorrect ? "+1" : "+0"}</div>
                         </div>
                       </div>
                     ))}
@@ -251,7 +266,9 @@ export default function HostPage() {
                     <div className="rounded-2xl bg-[#01377D] p-4 text-white font-bold">
                       {answeringPlayer?.name || "Answering player"} fooled{" "}
                       {room.round.results.answeringPlayerPoints} player
-                      {room.round.results.answeringPlayerPoints === 1 ? "" : "s"}{" "}
+                      {room.round.results.answeringPlayerPoints === 1
+                        ? ""
+                        : "s"}{" "}
                       and gets +{room.round.results.answeringPlayerPoints}
                     </div>
                   </div>
@@ -264,6 +281,7 @@ export default function HostPage() {
             <h2 className="mb-5 text-3xl font-black">Leaderboard</h2>
 
             <div className="space-y-3">
+              {/* ✅ sortedPlayers is already deduped via useMemo above */}
               {sortedPlayers.map((player: any, index: number) => (
                 <motion.div
                   layout
@@ -296,6 +314,7 @@ export default function HostPage() {
               </p>
 
               <div className="space-y-2">
+                {/* ✅ room.players is already deduped via normalizeRoom */}
                 {room.players.map((player: any) => (
                   <motion.div
                     layout
