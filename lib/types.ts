@@ -12,6 +12,7 @@ export type Question = {
 };
 
 export type Round = {
+  roundId?: number;
   answeringPlayerId: string;
   question: Question | null;
   chosenAnswerIndex: number | null;
@@ -23,6 +24,6 @@ export type Room = {
   code: string;
   hostId: string;
   players: Player[];
-  status: "lobby" | "answering" | "guessing" | "results";
+  status: "lobby" | "answering" | "guessing" | "intermission" | "finished";
   round: Round | null;
 };

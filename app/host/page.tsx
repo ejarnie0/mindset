@@ -54,15 +54,9 @@ export default function HostPage() {
     socket.emit("game:start-round", { code: room.code });
   };
 
-  const nextRound = () => {
-    if (!room) return;
-    socket.emit("game:next-round", { code: room.code });
-  };
-
-  const sortedPlayers = useMemo(() => {
+  const leaderboardPlayers = useMemo(() => {
     if (!room?.players) return [];
-    // ✅ Defensive dedup here too — belt-and-suspenders
-    return dedupePlayers([...room.players]).sort(
+    return dedupePlayers(room.players.filter((p: any) => !p.isHost)).sort(
       (a: any, b: any) => b.score - a.score
     );
   }, [room]);
@@ -70,6 +64,21 @@ export default function HostPage() {
   const answeringPlayer = room?.players?.find(
     (p: any) => p.id === room?.round?.answeringPlayerId
   );
+
+  const roundPointLines = useMemo(() => {
+    if (!room?.round?.results) return [];
+    const lines: string[] = [];
+    for (const gr of room.round.results.guessResults) {
+      if (gr.wasCorrect) lines.push(`${gr.name} got a point!`);
+    }
+    const fooled = room.round.results.answeringPlayerPoints ?? 0;
+    const chooserName = answeringPlayer?.name;
+    if (fooled > 0 && chooserName) {
+      if (fooled === 1) lines.push(`${chooserName} got a point!`);
+      else lines.push(`${chooserName} got ${fooled} points!`);
+    }
+    return lines;
+  }, [room?.round?.results, answeringPlayer?.name]);
 
   const getStatusLabel = () => {
     if (!room) return "";
@@ -79,20 +88,15 @@ export default function HostPage() {
       return `${answeringPlayer?.name || "A player"} is answering`;
     }
     if (room.status === "guessing") return "Players are guessing";
-    if (room.status === "results") return "Round results";
+    if (room.status === "intermission") return "Between rounds — waiting on phones";
     return room.status;
   };
 
-  const getSubmissionLabel = () => {
-    if (!room?.round) return "No active round";
-    if (room.status === "answering") {
-      return `${room.submittedCount || 0} / 1 answered`;
-    }
-    if (room.status === "guessing" || room.status === "results") {
-      return `${room.submittedCount || 0} / ${room.totalGuessers || 0} guessed`;
-    }
-    return "";
-  };
+  const gameInProgress =
+    room &&
+    (room.status === "answering" ||
+      room.status === "guessing" ||
+      room.status === "intermission");
 
   return (
     <main className="min-h-screen bg-[#97E7F5] p-6">
@@ -118,10 +122,10 @@ export default function HostPage() {
       ) : (
         <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[1.3fr_0.8fr]">
           <section className="rounded-[32px] border-4 border-[#01377D] bg-white p-6 shadow-[0_14px_0_#01377D]">
-            <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+            <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="mb-2 text-sm font-bold uppercase tracking-[0.2em] text-[#01377D]">
-                  Host Dashboard
+                  Mindset
                 </p>
                 <h1 className="text-5xl font-black text-[#01377D]">
                   Room {room.code}
@@ -134,7 +138,8 @@ export default function HostPage() {
                 </div>
 
                 {typeof room.timeLeft === "number" &&
-                  room.status !== "results" && (
+                  room.status !== "intermission" &&
+                  room.status !== "finished" && (
                     <div className="rounded-full bg-[#01377D] px-5 py-3 font-black text-white">
                       ⏱ {room.timeLeft}s
                     </div>
@@ -142,147 +147,71 @@ export default function HostPage() {
               </div>
             </div>
 
-            <div className="mb-4 rounded-2xl bg-[#01377D] px-5 py-4 text-white">
-              <p className="text-sm font-bold uppercase tracking-[0.18em] opacity-80">
-                Submission Progress
-              </p>
-              <p className="mt-1 text-2xl font-black">{getSubmissionLabel()}</p>
-            </div>
-
             {room.winner && (
-              <div className="mb-6 rounded-3xl bg-[#26B170] p-5 text-white">
+              <div className="mb-8 rounded-3xl bg-[#26B170] p-6 text-white">
                 <p className="text-sm font-bold uppercase tracking-[0.18em]">
                   Winner
                 </p>
-                <p className="mt-2 text-3xl font-black">
+                <p className="mt-2 text-3xl font-black md:text-4xl">
                   {room.winner.name} reached 10 points
                 </p>
               </div>
             )}
 
-            <div className="mb-6 rounded-3xl border-2 border-[#97E7F5] bg-[#EAFBFE] p-5">
-              <p className="mb-2 text-sm font-bold uppercase tracking-[0.18em] text-[#01377D]">
-                Current Round
-              </p>
-
-              {!room.round ? (
+            {room.status === "lobby" && !room.round && (
+              <div className="mb-8 space-y-6">
                 <p className="text-xl font-bold text-[#01377D]">
-                  Waiting for the next round to start.
+                  When everyone has joined, start the first round.
                 </p>
-              ) : (
-                <>
-                  <p className="mb-3 text-lg font-bold text-[#01377D]">
+                <button
+                  onClick={startRound}
+                  disabled={
+                    room.winner ||
+                    room.players.filter((p: any) => !p.isHost).length < 2
+                  }
+                  className="rounded-2xl bg-[#009DD1] px-6 py-4 text-lg font-black text-white shadow-[0_6px_0_#01377D] transition hover:-translate-y-0.5 active:translate-y-1 active:shadow-[0_2px_0_#01377D] disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
+                >
+                  Start Round
+                </button>
+              </div>
+            )}
+
+            {room.round && (
+              <div className="flex min-h-[280px] flex-col justify-center gap-8">
+                <div className="rounded-3xl border-4 border-[#01377D] bg-[#EAFBFE] px-6 py-8 md:px-10 md:py-10">
+                  <p className="mb-4 text-sm font-black uppercase tracking-[0.2em] text-[#01377D]/70">
+                    Question
+                  </p>
+                  <p className="text-2xl font-black leading-tight text-[#01377D] md:text-3xl lg:text-4xl">
                     {room.round.question.prompt}
                   </p>
-
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {room.round.question.options.map(
-                      (option: string, index: number) => {
-                        const isCorrect =
-                          room.status === "results" &&
-                          index === room.round.chosenAnswerIndex;
-
-                        return (
-                          <div
-                            key={index}
-                            className={`rounded-2xl border-2 p-4 font-bold ${
-                              isCorrect
-                                ? "border-[#26B170] bg-[#26B170] text-white"
-                                : "border-[#97E7F5] bg-white text-[#01377D]"
-                            }`}
-                          >
-                            {option}
-                          </div>
-                        );
-                      }
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-
-            <div className="flex flex-wrap gap-4">
-              <button
-                onClick={startRound}
-                disabled={
-                  room.status !== "lobby" ||
-                  room.winner ||
-                  room.players.filter((p: any) => !p.isHost).length < 2
-                }
-                className="rounded-2xl bg-[#009DD1] px-6 py-4 text-lg font-black text-white shadow-[0_6px_0_#01377D] transition hover:-translate-y-0.5 active:translate-y-1 active:shadow-[0_2px_0_#01377D] disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
-              >
-                Start Round
-              </button>
-
-              <button
-                onClick={nextRound}
-                className="rounded-2xl bg-[#26B170] px-6 py-4 text-lg font-black text-white shadow-[0_6px_0_#01377D] transition hover:-translate-y-0.5 active:translate-y-1 active:shadow-[0_2px_0_#01377D]"
-              >
-                Next Round
-              </button>
-            </div>
-
-            {room.status === "results" && room.round?.results && (
-              <div className="mt-6 space-y-4">
-                <div className="rounded-3xl bg-[#7ED348] p-5 text-[#01377D]">
-                  <p className="text-sm font-bold uppercase tracking-[0.18em]">
-                    Correct Answer
-                  </p>
-                  <p className="mt-2 text-3xl font-black">
-                    {room.round.question.options[room.round.chosenAnswerIndex]}
-                  </p>
                 </div>
 
-                <div className="rounded-3xl border-2 border-[#97E7F5] bg-white p-5">
-                  <p className="mb-3 text-sm font-bold uppercase tracking-[0.18em] text-[#01377D]">
-                    Round Results
-                  </p>
-
-                  <div className="space-y-3">
-                    {room.round.results.guessResults.map((result: any) => (
-                      <div
-                        key={result.playerId}
-                        className={`rounded-2xl p-4 font-bold ${
-                          result.wasCorrect
-                            ? "bg-[#26B170] text-white"
-                            : "bg-[#EAFBFE] text-[#01377D]"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p>{result.name}</p>
-                            <p className="text-sm opacity-80">
-                              Guessed:{" "}
-                              {typeof result.guessIndex === "number"
-                                ? room.round.question.options[result.guessIndex]
-                                : "No guess"}
-                            </p>
-                          </div>
-                          <div>{result.wasCorrect ? "+1" : "+0"}</div>
-                        </div>
-                      </div>
-                    ))}
-
-                    <div className="rounded-2xl bg-[#01377D] p-4 text-white font-bold">
-                      {answeringPlayer?.name || "Answering player"} fooled{" "}
-                      {room.round.results.answeringPlayerPoints} player
-                      {room.round.results.answeringPlayerPoints === 1
-                        ? ""
-                        : "s"}{" "}
-                      and gets +{room.round.results.answeringPlayerPoints}
+                {room.status === "intermission" && room.round.results && (
+                  <>
+                    <div className="rounded-3xl bg-[#26B170] px-6 py-6 text-center text-white md:px-8 md:py-8">
+                      <p className="mb-2 text-sm font-black uppercase tracking-[0.2em] opacity-90">
+                        Correct answer
+                      </p>
+                      <p className="text-2xl font-black md:text-4xl">
+                        {
+                          room.round.question.options[
+                            room.round.results.correctAnswerIndex
+                          ]
+                        }
+                      </p>
                     </div>
-                  </div>
-                </div>
+                  </>
+                )}
               </div>
             )}
           </section>
 
-          <aside className="rounded-[32px] bg-[#01377D] p-6 text-white shadow-[0_14px_0_#009DD1]">
+          <aside className="flex min-h-[min(520px,75vh)] flex-col rounded-[32px] bg-[#01377D] p-6 text-white shadow-[0_14px_0_#009DD1]">
             <h2 className="mb-5 text-3xl font-black">Leaderboard</h2>
 
             <div className="space-y-3">
-              {/* ✅ sortedPlayers is already deduped via useMemo above */}
-              {sortedPlayers.map((player: any, index: number) => (
+              {leaderboardPlayers.map((player: any, index: number) => (
                 <motion.div
                   layout
                   key={player.id}
@@ -293,9 +222,7 @@ export default function HostPage() {
                 >
                   <div>
                     <p className="text-sm opacity-80">#{index + 1}</p>
-                    <p className="text-xl font-bold">
-                      {player.name} {player.isHost ? "(Host)" : ""}
-                    </p>
+                    <p className="text-xl font-bold">{player.name}</p>
                   </div>
 
                   <motion.div
@@ -308,27 +235,49 @@ export default function HostPage() {
               ))}
             </div>
 
-            <div className="mt-6 rounded-3xl bg-white/10 p-5">
-              <p className="mb-3 text-sm font-bold uppercase tracking-[0.18em] opacity-80">
-                Players
-              </p>
-
-              <div className="space-y-2">
-                {/* ✅ room.players is already deduped via normalizeRoom */}
-                {room.players.map((player: any) => (
-                  <motion.div
-                    layout
-                    key={player.id}
-                    initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.2 }}
-                    className="font-semibold"
-                  >
-                    {player.name}
-                  </motion.div>
-                ))}
+            {room.status === "intermission" && roundPointLines.length > 0 && (
+              <div className="mt-auto border-t border-white/20 pt-6">
+                <p className="mb-3 text-right text-xs font-bold uppercase tracking-[0.18em] text-white/60">
+                  This round
+                </p>
+                <div className="space-y-2 text-right">
+                  {roundPointLines.map((line, i) => (
+                    <motion.p
+                      key={`${line}-${i}`}
+                      initial={{ opacity: 0, x: 8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.3, delay: i * 0.08 }}
+                      className="text-lg font-bold leading-snug text-[#7ED348] md:text-xl"
+                    >
+                      {line}
+                    </motion.p>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
+
+            {!gameInProgress && (
+              <div className="mt-6 rounded-3xl bg-white/10 p-5">
+                <p className="mb-3 text-sm font-bold uppercase tracking-[0.18em] opacity-80">
+                  Players
+                </p>
+
+                <div className="space-y-2">
+                  {room.players.map((player: any) => (
+                    <motion.div
+                      layout
+                      key={player.id}
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="font-semibold"
+                    >
+                      {player.name}
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            )}
           </aside>
         </div>
       )}

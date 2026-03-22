@@ -4,6 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { socket } from "../../../lib/socket";
 import { useParams } from "next/navigation";
 
+function sortPlayersByScore(players: any[]) {
+  return [...players]
+    .filter((p) => !p.isHost)
+    .sort((a, b) => b.score - a.score);
+}
+
 export default function PlayerRoomPage() {
   const params = useParams();
 
@@ -81,7 +87,11 @@ export default function PlayerRoomPage() {
   useEffect(() => {
     setSelectedIndex(null);
     setHasSubmitted(false);
-  }, [room?.round?.question?.id, room?.status]);
+  }, [
+    room?.round?.roundId,
+    room?.status,
+    room?.round?.answeringPlayerId,
+  ]);
 
   if (!room) {
     return (
@@ -109,8 +119,24 @@ export default function PlayerRoomPage() {
 
   const winner = room.winner;
 
+  const scoreboardPlayers = sortPlayersByScore(room.players ?? []);
+
+  const isChooserThisRound = room.round?.answeringPlayerId === effectivePlayerId;
+  const myGuessResult = room.round?.results?.guessResults?.find(
+    (r: any) => r.playerId === effectivePlayerId
+  );
+  const hasMarkedReady =
+    room.status === "intermission" &&
+    effectivePlayerId &&
+    room.nextRoundReady?.[effectivePlayerId];
+
+  const myGuessAlreadyRecorded =
+    room.status === "guessing" &&
+    Boolean(effectivePlayerId) &&
+    room.round?.guesses?.[effectivePlayerId as string] !== undefined;
+
   const submitSelection = () => {
-    if (selectedIndex === null || hasSubmitted || !room?.round) return;
+    if (selectedIndex === null || !room?.round) return;
 
     const payload = {
       code,
@@ -119,6 +145,7 @@ export default function PlayerRoomPage() {
     };
 
     if (isAnsweringPlayer && room.status === "answering") {
+      if (hasSubmitted) return;
       socket.emit(
         "player:submit-answer",
         { ...payload, answerIndex: selectedIndex },
@@ -131,18 +158,36 @@ export default function PlayerRoomPage() {
         }
       );
     } else if (!isAnsweringPlayer && room.status === "guessing") {
+      if (myGuessAlreadyRecorded) return;
       socket.emit(
         "player:submit-guess",
         { ...payload, guessIndex: selectedIndex },
         (res: any) => {
-          if (res?.ok) {
-            setHasSubmitted(true);
-          } else {
+          if (!res?.ok) {
             console.log("submit-guess rejected:", res?.reason);
           }
         }
       );
     }
+  };
+
+  const markReadyForNextRound = () => {
+    if (room.status !== "intermission" || !effectivePlayerId) return;
+    if (room.nextRoundReady?.[effectivePlayerId]) return;
+
+    socket.emit(
+      "player:ready-next-round",
+      {
+        code,
+        playerId: effectivePlayerId,
+        playerName,
+      },
+      (res: any) => {
+        if (!res?.ok) {
+          console.log("ready-next-round rejected:", res?.reason);
+        }
+      }
+    );
   };
 
   const timerPercent =
@@ -178,7 +223,9 @@ export default function PlayerRoomPage() {
           </div>
         )}
 
-        {typeof room.timeLeft === "number" && room.status !== "finished" && (
+        {typeof room.timeLeft === "number" &&
+          room.status !== "finished" &&
+          room.status !== "intermission" && (
           <div className="mb-4">
             <div className="mb-1 text-[#01377D] font-bold">⏱ {room.timeLeft}s</div>
             <div className="h-3 w-full overflow-hidden rounded-full bg-[#EAFBFE]">
@@ -199,11 +246,21 @@ export default function PlayerRoomPage() {
         {room.round && (
           <>
             <div className="mb-3 rounded-2xl bg-[#01377D] px-4 py-3 text-white font-bold">
-              Phase: {room.status}
-              <br />
-              {room.status === "answering"
-                ? `${room.submittedCount || 0} / 1 answered`
-                : `${room.submittedCount || 0} / ${room.totalGuessers || 0} guessed`}
+              {room.status === "intermission" ? (
+                <>
+                  Between rounds
+                  <br />
+                  {room.readyCount ?? 0} / {room.readyTotal ?? 0} players ready
+                </>
+              ) : (
+                <>
+                  Phase: {room.status}
+                  <br />
+                  {room.status === "answering"
+                    ? `${room.submittedCount || 0} / 1 answered`
+                    : `${room.submittedCount || 0} / ${room.totalGuessers || 0} guessed`}
+                </>
+              )}
             </div>
 
             <div className="rounded-2xl bg-[#EAFBFE] p-5 mb-4 border-2 border-[#97E7F5]">
@@ -262,8 +319,10 @@ export default function PlayerRoomPage() {
                   {room.round.question.options.map((option: string, index: number) => (
                     <button
                       key={index}
-                      onClick={() => !hasSubmitted && setSelectedIndex(index)}
-                      disabled={hasSubmitted}
+                      onClick={() =>
+                        !myGuessAlreadyRecorded && setSelectedIndex(index)
+                      }
+                      disabled={myGuessAlreadyRecorded}
                       className={`rounded-2xl font-bold p-4 text-left shadow-[0_6px_0_#01377D] transition disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none ${
                         selectedIndex === index
                           ? "bg-[#26B170] text-white"
@@ -277,10 +336,10 @@ export default function PlayerRoomPage() {
 
                 <button
                   onClick={submitSelection}
-                  disabled={selectedIndex === null || hasSubmitted}
+                  disabled={selectedIndex === null || myGuessAlreadyRecorded}
                   className="w-full rounded-2xl bg-[#01377D] px-6 py-4 text-lg font-black text-white disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Submit Guess
+                  {myGuessAlreadyRecorded ? "Guess locked in" : "Submit Guess"}
                 </button>
               </>
             )}
@@ -291,11 +350,66 @@ export default function PlayerRoomPage() {
               </div>
             )}
 
-            {room.status === "results" && room.round.results && (
+            {room.status === "intermission" && room.round.results && (
               <div className="mt-2 space-y-4">
+                <div
+                  className={`rounded-2xl border-2 p-4 font-bold ${
+                    isChooserThisRound
+                      ? "border-[#009DD1] bg-[#EAFBFE] text-[#01377D]"
+                      : myGuessResult?.wasCorrect
+                        ? "border-[#26B170] bg-[#26B170] text-white"
+                        : "border-[#01377D] bg-white text-[#01377D]"
+                  }`}
+                >
+                  <p className="text-sm font-black uppercase tracking-wide opacity-80 mb-1">
+                    Your round
+                  </p>
+                  {isChooserThisRound ? (
+                    (room.round.results.answeringPlayerPoints ?? 0) > 0 ? (
+                      <p>
+                        You fooled {room.round.results.answeringPlayerPoints} player
+                        {room.round.results.answeringPlayerPoints === 1 ? "" : "s"} and
+                        earned +{room.round.results.answeringPlayerPoints}{" "}
+                        point
+                        {room.round.results.answeringPlayerPoints === 1 ? "" : "s"}!
+                      </p>
+                    ) : (
+                      <p>
+                        Everyone guessed your pick (or matched it). No fool points this
+                        round — guessers still earn +1 when they&apos;re right.
+                      </p>
+                    )
+                  ) : myGuessResult ? (
+                    myGuessResult.wasCorrect ? (
+                      <p>You guessed correctly and earned +1 point!</p>
+                    ) : (
+                      <p>No point this round — your guess didn&apos;t match.</p>
+                    )
+                  ) : (
+                    <p>You didn&apos;t guess this round.</p>
+                  )}
+                </div>
+
                 <div className="rounded-2xl bg-[#7ED348] p-4 text-[#01377D] font-bold">
                   Correct answer:{" "}
                   {room.round.question.options[room.round.results.correctAnswerIndex]}
+                </div>
+
+                <div className="rounded-2xl bg-[#01377D] p-4 text-white">
+                  <p className="text-sm font-black uppercase tracking-wide opacity-80 mb-2">
+                    Scores
+                  </p>
+                  <ul className="space-y-2 font-bold">
+                    {scoreboardPlayers.map((p: any) => (
+                      <li
+                        key={p.id}
+                        className="flex justify-between gap-3 border-b border-white/20 pb-2 last:border-0 last:pb-0"
+                      >
+                        <span>{p.name}</span>
+                        <span>{p.score} pts</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
 
                 {room.round.results.guessResults.map((r: any) => (
@@ -321,6 +435,15 @@ export default function PlayerRoomPage() {
                     </div>
                   </div>
                 ))}
+
+                <button
+                  type="button"
+                  onClick={markReadyForNextRound}
+                  disabled={!!hasMarkedReady}
+                  className="w-full rounded-2xl bg-[#26B170] px-6 py-4 text-lg font-black text-white shadow-[0_6px_0_#01377D] transition hover:-translate-y-0.5 active:translate-y-1 active:shadow-[0_2px_0_#01377D] disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none disabled:translate-y-0"
+                >
+                  {hasMarkedReady ? "Waiting for other players…" : "Next question!"}
+                </button>
               </div>
             )}
           </>

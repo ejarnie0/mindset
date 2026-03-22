@@ -17,8 +17,6 @@ const rooms = {};
 const WIN_SCORE = 10;
 const ANSWER_TIME = 15;
 const GUESS_TIME = 15;
-const RESULT_TIME = 5;
-
 function makeCode() {
   return Math.random().toString(36).substring(2, 6).toUpperCase();
 }
@@ -45,11 +43,30 @@ function getSubmittedCount(room) {
     return room.round.chosenAnswerIndex !== null ? 1 : 0;
   }
 
-  if (room.status === "guessing" || room.status === "results") {
+  if (room.status === "guessing" || room.status === "intermission") {
     return Object.keys(room.round.guesses).length;
   }
 
   return 0;
+}
+
+function getReadyForNextProgress(room) {
+  const players = getNonHostPlayers(room);
+  const ready = room.nextRoundReady || {};
+  const readyCount = players.filter((p) => ready[p.id]).length;
+  return { readyCount, readyTotal: players.length };
+}
+
+function tryStartNextRoundWhenAllReady(room) {
+  const players = getNonHostPlayers(room);
+  if (players.length === 0) return;
+
+  const ready = room.nextRoundReady || {};
+  if (!players.every((p) => ready[p.id])) return;
+
+  clearRoomTimer(room);
+  room.nextRoundReady = {};
+  startNextRound(room);
 }
 
 function getWinner(room) {
@@ -58,11 +75,14 @@ function getWinner(room) {
 
 function getPublicRoom(room) {
   const { timerInterval, timerTimeout, ...serializable } = room;
+  const { readyCount, readyTotal } = getReadyForNextProgress(room);
   return {
     ...serializable,
     winner: getWinner(room),
     submittedCount: getSubmittedCount(room),
     totalGuessers: getTotalGuessers(room),
+    readyCount,
+    readyTotal,
   };
 }
 
@@ -172,6 +192,11 @@ function rebindPlayerSocket(room, oldId, newId) {
       );
     }
   }
+
+  if (room.nextRoundReady && room.nextRoundReady[oldId]) {
+    room.nextRoundReady[newId] = true;
+    delete room.nextRoundReady[oldId];
+  }
 }
 
 function ensurePlayerBound(room, socket, playerId, playerName) {
@@ -210,6 +235,8 @@ function moveToGuessing(room) {
 }
 
 function startNextRound(room) {
+  room.nextRoundReady = {};
+
   if (getWinner(room)) {
     room.status = "finished";
     room.round = null;
@@ -228,7 +255,9 @@ function startNextRound(room) {
   }
 
   room.status = "answering";
+  room.roundCounter = (room.roundCounter || 0) + 1;
   room.round = {
+    roundId: room.roundCounter,
     answeringPlayerId: answeringPlayer.id,
     question: pickRandomQuestion(),
     chosenAnswerIndex: null,
@@ -254,9 +283,9 @@ function startNextRound(room) {
 
 function finishRound(room) {
   if (!room.round) return;
+  if (room.round.revealed) return;
 
   clearRoomTimer(room);
-  room.status = "results";
   room.round.revealed = true;
 
   const correct = room.round.chosenAnswerIndex;
@@ -282,24 +311,30 @@ function finishRound(room) {
 
   const answeringPlayerPoints = guessResults.filter((r) => !r.wasCorrect).length;
 
+  const answeringPlayer = room.players.find(
+    (p) => p.id === room.round.answeringPlayerId && !p.isHost
+  );
+  if (answeringPlayer && answeringPlayerPoints > 0) {
+    answeringPlayer.score += answeringPlayerPoints;
+  }
+
   room.round.results = {
     correctAnswerIndex: correct,
     guessResults,
     answeringPlayerPoints,
   };
 
-  emitRoom(room);
-
-  startCountdown(room, RESULT_TIME, () => {
+  if (getWinner(room)) {
+    room.status = "finished";
     room.round = null;
-    room.status = "lobby";
+    room.nextRoundReady = {};
     emitRoom(room);
+    return;
+  }
 
-    setTimeout(() => {
-      if (!rooms[room.code]) return;
-      startNextRound(room);
-    }, 400);
-  });
+  room.status = "intermission";
+  room.nextRoundReady = {};
+  emitRoom(room);
 }
 
 io.on("connection", (socket) => {
@@ -326,6 +361,7 @@ io.on("connection", (socket) => {
       timerTimeout: null,
       answerOrder: [],
       answerTurnIndex: 0,
+      nextRoundReady: {},
     };
 
     socket.join(code);
@@ -402,6 +438,25 @@ io.on("connection", (socket) => {
     moveToGuessing(room);
   });
 
+  socket.on("player:ready-next-round", ({ code, playerId, playerName }, callback) => {
+    const room = rooms[code];
+    if (!room) return callback?.({ ok: false, reason: "no-room" });
+    if (room.status !== "intermission") {
+      return callback?.({ ok: false, reason: "wrong-phase" });
+    }
+
+    const player = ensurePlayerBound(room, socket, playerId, playerName);
+    if (!player || player.isHost) {
+      return callback?.({ ok: false, reason: "invalid-player" });
+    }
+
+    if (!room.nextRoundReady) room.nextRoundReady = {};
+    room.nextRoundReady[player.id] = true;
+    callback?.({ ok: true });
+    emitRoom(room);
+    tryStartNextRoundWhenAllReady(room);
+  });
+
   socket.on("player:submit-guess", ({ code, guessIndex, playerId, playerName }, callback) => {
     const room = rooms[code];
     if (!room || !room.round) return callback?.({ ok: false, reason: "no-room-or-round" });
@@ -427,9 +482,12 @@ io.on("connection", (socket) => {
       guessers.length > 0 &&
       guessers.every((p) => room.round.guesses[p.id] !== undefined);
 
-    emitRoom(room);
+    if (allGuessed) {
+      finishRound(room);
+      return;
+    }
 
-    if (allGuessed) finishRound(room);
+    emitRoom(room);
   });
 
   socket.on("game:next-round", ({ code }) => {
@@ -437,11 +495,16 @@ io.on("connection", (socket) => {
     if (!room) return;
 
     clearRoomTimer(room);
-    room.round = null;
-    room.status = "lobby";
-    emitRoom(room);
+    room.nextRoundReady = {};
 
-    if (!getWinner(room)) startNextRound(room);
+    if (getWinner(room)) {
+      room.round = null;
+      room.status = "finished";
+      emitRoom(room);
+      return;
+    }
+
+    startNextRound(room);
   });
 
   socket.on("disconnect", () => {
@@ -459,6 +522,7 @@ io.on("connection", (socket) => {
           clearRoomTimer(room);
           room.round = null;
           room.status = "lobby";
+          room.nextRoundReady = {};
         }
 
         emitRoom(room);
