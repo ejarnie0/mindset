@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { socket } from "@/lib/socket";
+import { socket } from "../../lib/socket";
 
 export default function HostPage() {
   const [room, setRoom] = useState<any>(null);

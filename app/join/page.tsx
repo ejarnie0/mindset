@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { socket } from "@/lib/socket";
+import { socket } from "../../lib/socket";
 
 export default function JoinPage() {
   const [name, setName] = useState("");
