@@ -25,8 +25,20 @@ function getNonHostPlayers(room) {
   return room.players.filter((p) => !p.isHost);
 }
 
-function pickRandomQuestion() {
-  return questions[Math.floor(Math.random() * questions.length)];
+function pickQuestionForRoom(room) {
+  if (!room.usedQuestionIds) room.usedQuestionIds = [];
+
+  const used = new Set(room.usedQuestionIds);
+  let pool = questions.filter((q) => !used.has(q.id));
+
+  if (pool.length === 0) {
+    room.usedQuestionIds = [];
+    pool = questions;
+  }
+
+  const q = pool[Math.floor(Math.random() * pool.length)];
+  room.usedQuestionIds.push(q.id);
+  return q;
 }
 
 function getTotalGuessers(room) {
@@ -74,7 +86,7 @@ function getWinner(room) {
 }
 
 function getPublicRoom(room) {
-  const { timerInterval, timerTimeout, ...serializable } = room;
+  const { timerInterval, timerTimeout, usedQuestionIds, ...serializable } = room;
   const { readyCount, readyTotal } = getReadyForNextProgress(room);
   return {
     ...serializable,
@@ -259,7 +271,7 @@ function startNextRound(room) {
   room.round = {
     roundId: room.roundCounter,
     answeringPlayerId: answeringPlayer.id,
-    question: pickRandomQuestion(),
+    question: pickQuestionForRoom(room),
     chosenAnswerIndex: null,
     guesses: {},
     revealed: false,
@@ -362,6 +374,7 @@ io.on("connection", (socket) => {
       answerOrder: [],
       answerTurnIndex: 0,
       nextRoundReady: {},
+      usedQuestionIds: [],
     };
 
     socket.join(code);
