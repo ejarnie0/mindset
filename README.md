@@ -1,36 +1,75 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Mindset
 
-## Getting Started
+**Mindset** is a party game for a group in the same room (or on a video call). One person at a time privately picks an answer to a fun “this or that” or true/false style question. Everyone else tries to guess what they chose. The game keeps score on a live leaderboard until someone wins.
 
-First, run the development server:
+## How to play
+
+1. **Host** opens the host screen on a laptop or tablet and **creates a room**. A short room code appears.
+2. **Players** join on their phones with their name and that code.
+3. When at least two players have joined, the host taps **Start round**.
+4. Each round:
+   - The game picks **one player** to be the **chooser** (rotates over time).
+   - The chooser sees the question and **submits their real answer** (timed).
+   - Everyone else **guesses** which option the chooser picked (timed).
+   - When everyone has guessed or time runs out, **results** show the correct answer and who scored.
+5. **Between rounds**, each player taps **Next question!** when they’re ready. The next round starts once **everyone** has tapped.
+6. The game **ends** when someone reaches **10 points**.
+
+## Scoring
+
+- **Guessers** who match the chooser’s answer get **+1 point**.
+- The **chooser** gets **+1 point for each player they fooled** (anyone who guessed a **wrong** answer, including no guess when time runs out).
+- The **host** does not play and does not appear on the leaderboard.
+
+## Questions
+
+Prompts live in `data/questions.json`. Each question has a unique `id`, a `prompt`, and either **two** options (e.g. True/False) or **four** options. During a single room session, **the same question is not used twice** until every question in the file has been played once; then the deck resets so the game can continue.
+
+## Tech stack
+
+- **Next.js** (React) — player join flow, in-room UI, host display
+- **Node** + **Express** + **Socket.IO** — real-time room state, rounds, and scoring (`server/index.js`)
+
+## Run locally
+
+You need **two terminals**: one for the web app and one for the socket server.
+
+```bash
+npm install
+```
+
+Terminal 1 — Next.js (port **3000**, bound to all interfaces so phones on your Wi‑Fi can connect):
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Terminal 2 — Socket server (port **3001** by default):
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+```bash
+npm run socket
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Open the app at `http://localhost:3000` on the host machine, or `http://<your-computer-LAN-IP>:3000` from phones on the same network.
 
-## Learn More
+## Deploying (overview)
 
-To learn more about Next.js, take a look at the following resources:
+- **Frontend:** deploy the Next.js app (e.g. **Vercel**).
+- **Realtime server:** run `node server/index.js` somewhere that supports long-lived processes (e.g. **Railway**). The platform usually sets `PORT`; the server reads it automatically.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Set **`NEXT_PUBLIC_SOCKET_URL`** on the frontend host to your **public HTTPS** socket URL (no trailing slash). See `.env.example` for a short checklist.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Optional: this repo includes a **`Dockerfile`** suited to running only the socket service, and **`railway.json`** with a start command for Railway.
 
-## Deploy on Vercel
+## Project layout (high level)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+| Path | Role |
+|------|------|
+| `app/` | Next.js routes (home, join, host, room by code) |
+| `server/index.js` | Socket.IO game logic and rooms |
+| `data/questions.json` | Question bank |
+| `lib/socket.ts` | Client Socket.IO connection (env-aware URL) |
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+Have fun — and may the best mind-reader win.
