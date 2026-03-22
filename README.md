@@ -1,18 +1,18 @@
 # Mindset
 
-**Mindset** is a party game for a group in the same room (or on a video call). One person at a time privately picks an answer to a fun “this or that” or true/false style question. Everyone else tries to guess what they chose. The game keeps score on a live leaderboard until someone wins.
+**Mindset** is a party game for a group in the same room. One person at a time privately picks an answer to a multiple choice style questionnaire. Everyone else tries to guess what that person would choose. The game keeps score on a live leaderboard and ends once someone gets to 10 points.
 
 ## How to play
 
-1. **Host** opens the host screen on a laptop or tablet and **creates a room**. A short room code appears.
+1. **Host** opens the host screen on a laptop or tablet and **creates a room**. A room code will then appear.
 2. **Players** join on their phones with their name and that code.
-3. When at least two players have joined, the host taps **Start round**.
+3. When **at least** two players have joined, the host pushes the **Start round** button.
 4. Each round:
-   - The game picks **one player** to be the **chooser** (rotates over time).
-   - The chooser sees the question and **submits their real answer** (timed).
-   - Everyone else **guesses** which option the chooser picked (timed).
+   - The game picks **one player** to be the **chooser** (the chooser rotates every round).
+   - The chooser reads the question and **submits their real answer**. Each player gets 15s to answer!
+   - Everyone else **guesses** which option the chooser picked. Each player gets 15s to answer!
    - When everyone has guessed or time runs out, **results** show the correct answer and who scored.
-5. **Between rounds**, each player taps **Next question!** when they’re ready. The next round starts once **everyone** has tapped.
+5. **Between rounds**, each player taps **Next question!** when they’re ready. The next round starts once **everyone** has pressed it.
 6. The game **ends** when someone reaches **10 points**.
 
 ## Scoring
