@@ -160,8 +160,7 @@ export default function HomePage() {
               Scoring
             </p>
             <p className="text-lg font-bold text-[#01377D]">
-              Correct guessers earn points, and the answering player earns
-              points for fooling people.
+              Correct guessers earn one point for every answer. First to 10 points wins!
             </p>
           </div>
         </div>
