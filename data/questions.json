@@ -173,5 +173,70 @@
     "id": 35,
     "prompt": "Which commute sounds nicest?",
     "options": ["Walk or bike", "Short drive", "Train or bus with a seat", "Work from home"]
+  },
+  {
+    "id": 36,
+    "prompt": "Someone asks you a controversial question, you respond by:",
+    "options": ["Changing the subject", "Saying something to please them and avoid answering seriously", "Speak your mind honestly", "Tell them you'd rather not talk about it"]
+  },
+  {
+    "id": 37,
+    "prompt": "There is one banana left at the grocery store, you and someone else go for it at the same time. You:",
+    "options": ["Give them the banana", "Take the banana yourself", "Avoid confrontation and ask a worker if there's any more", "Let them take it but make a passive aggressive comment"]
+  },
+  {
+    "id": 38,
+    "prompt": "First date! What's the dealbreaker?",
+    "options": ["They fart really loudly", "They order alcohol", "They're rude to the waiter", "They're poorly dressed"]
+  },
+  {
+    "id": 39,
+    "prompt": "First date! What's the biggest green flag?",
+    "options": ["They pay", "They're dressed really well", "They pick you up in a car", "They bring you flowers"]
+  },
+  {
+    "id": 40,
+    "prompt": "Your friend farts loudly in a group of friends. You:",
+    "options": ["You point and laugh", "You take the blame for them", "You pretend you didn't hear it", "You blame your biggest op"]
+  },
+  {
+    "id": 41,
+    "prompt": "What's your ideal sleeping environment?",
+    "options": ["Cold room with lots of blankets", "Hot room with no blankets", "Naked no matter what", "PJs no matter what"]
+  },
+  {
+    "id": 42,
+    "prompt": "What do you prefer to listen to while falling asleep?",
+    "options": ["Silence", "Whale calls", "Thunderstorm sounds", "Noise from a fan"]
+  },
+  {
+    "id": 43,
+    "prompt": "How do you like to be woken up?",
+    "options": ["Natural light", "Loud alarm", "Someone waking you up", "Natural body clock"]
+  },
+  {
+    "id": 44,
+    "prompt": "How do you identify?",
+    "options": ["Early bird", "Night owl", "Midday blue jay", "Sleepless toucan"]
+  },
+  {
+    "id": 45,
+    "prompt": "Pregnancy scare! You:",
+    "options": ["Keep it", "Get an abortion", "Give it up for adoption", "Secretly keep it and tell people it's your parent's"]
+  },
+  {
+    "id": 46,
+    "prompt": "You're a cashier and someone robs you with a weapon. You:",
+    "options": ["Give in to all of their demands", "Obey them but lie to the robber about what you have", "Fight back", "Beg for your life"]
+  },
+  {
+    "id": 47,
+    "prompt": "It's raining on your day off, you:",
+    "options": ["Stay home and chill in bed", "Have friends over", "Go for a rainy jaunt", "Go out to do something indoors"]
+  },
+  {
+    "id": 48,
+    "prompt": "A stranger's dog bites you, but it was clearly an accident. You:",
+    "options": ["Argue to put the dog down", "Forgive and forget", "Sue the owner", "Do nothing, but never forgive them"]
   }
 ]
