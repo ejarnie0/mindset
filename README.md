@@ -17,8 +17,7 @@
 
 ## Scoring
 
-- **Guessers** who match the chooser’s answer get **+1 point**.
-- The **chooser** gets **+1 point for each player they fooled** (anyone who guessed a **wrong** answer, including no guess when time runs out).
+Correct guessers earn one point for every answer!
 - The **host** does not play and does not appear on the leaderboard.
 
 ## Questions
