@@ -13,5 +13,165 @@
     "id": 3,
     "prompt": "Which food would you never get tired of?",
     "options": ["Pizza", "Pasta", "Fries", "Ice cream"]
+  },
+  {
+    "id": 4,
+    "prompt": "I'd rather get important news by text than a phone call.",
+    "options": ["True", "False"]
+  },
+  {
+    "id": 5,
+    "prompt": "Pick a vacation vibe.",
+    "options": ["Beach and sun", "Mountain cabin", "Big city museums", "Theme parks"]
+  },
+  {
+    "id": 6,
+    "prompt": "I've cried during a movie in the last year.",
+    "options": ["True", "False"]
+  },
+  {
+    "id": 7,
+    "prompt": "Which pet fits your life best?",
+    "options": ["Dog", "Cat", "Something small (fish, hamster…)", "No pets for me"]
+  },
+  {
+    "id": 8,
+    "prompt": "I enjoy cooking for other people.",
+    "options": ["True", "False"]
+  },
+  {
+    "id": 9,
+    "prompt": "Choose a late-night snack.",
+    "options": ["Chips", "Cereal", "Leftovers", "Something sweet"]
+  },
+  {
+    "id": 10,
+    "prompt": "I would take a pay cut for a shorter commute.",
+    "options": ["True", "False"]
+  },
+  {
+    "id": 11,
+    "prompt": "What's your ideal Friday night?",
+    "options": ["Games or hobbies at home", "Dinner with friends", "Live show or event", "Early to bed"]
+  },
+  {
+    "id": 12,
+    "prompt": "I've sent a text to the wrong person by accident.",
+    "options": ["True", "False"]
+  },
+  {
+    "id": 13,
+    "prompt": "Pick a season you like most.",
+    "options": ["Spring", "Summer", "Fall", "Winter"]
+  },
+  {
+    "id": 14,
+    "prompt": "I read for fun at least once a month.",
+    "options": ["True", "False"]
+  },
+  {
+    "id": 15,
+    "prompt": "Which social setting drains you fastest?",
+    "options": ["Huge loud party", "Small talk with strangers", "Forced team-building", "I'm energized by all of these"]
+  },
+  {
+    "id": 16,
+    "prompt": "I still have a stuffed animal or comfort item from childhood.",
+    "options": ["True", "False"]
+  },
+  {
+    "id": 17,
+    "prompt": "Choose your comfort watch.",
+    "options": ["Sitcom I've seen before", "Reality or competition", "Documentary", "Whatever is newest"]
+  },
+  {
+    "id": 18,
+    "prompt": "I've pretended I didn't see a message so I could reply later.",
+    "options": ["True", "False"]
+  },
+  {
+    "id": 19,
+    "prompt": "Pick a morning drink.",
+    "options": ["Coffee", "Tea", "Juice or smoothie", "Just water"]
+  },
+  {
+    "id": 20,
+    "prompt": "I enjoy being the planner for group hangouts.",
+    "options": ["True", "False"]
+  },
+  {
+    "id": 21,
+    "prompt": "Which gift would you rather receive?",
+    "options": ["Something handmade", "An experience ticket", "A practical gadget", "Cash or gift card"]
+  },
+  {
+    "id": 22,
+    "prompt": "I've sung karaoke in front of other people.",
+    "options": ["True", "False"]
+  },
+  {
+    "id": 23,
+    "prompt": "How do you recharge best?",
+    "options": ["Alone time", "Talking it out", "Exercise", "Creative project"]
+  },
+  {
+    "id": 24,
+    "prompt": "I would try skydiving if someone paid for it.",
+    "options": ["True", "False"]
+  },
+  {
+    "id": 25,
+    "prompt": "Pick a road-trip soundtrack.",
+    "options": ["Throwback hits", "Podcasts", "Indie or alt", "Whatever the driver picks"]
+  },
+  {
+    "id": 26,
+    "prompt": "I've laughed so hard I cried in the past month.",
+    "options": ["True", "False"]
+  },
+  {
+    "id": 27,
+    "prompt": "Which dessert wins?",
+    "options": ["Chocolate cake", "Fruit pie", "Ice cream sundae", "Something salty-sweet"]
+  },
+  {
+    "id": 28,
+    "prompt": "I keep a daily to-do list (paper or app).",
+    "options": ["True", "False"]
+  },
+  {
+    "id": 29,
+    "prompt": "Choose a superpower for chores.",
+    "options": ["Instant clean house", "Teleport errands away", "Never tired", "Meals appear finished"]
+  },
+  {
+    "id": 30,
+    "prompt": "I've stayed up past 2 a.m. just scrolling on my phone.",
+    "options": ["True", "False"]
+  },
+  {
+    "id": 31,
+    "prompt": "What's your ideal group size for dinner out?",
+    "options": ["Just two of us", "Three to four", "Five to eight", "The more the merrier"]
+  },
+  {
+    "id": 32,
+    "prompt": "I would rather win a small prize today than a huge prize in ten years.",
+    "options": ["True", "False"]
+  },
+  {
+    "id": 33,
+    "prompt": "Pick a hobby to try for a month.",
+    "options": ["Pottery or crafts", "Rock climbing", "Improv or acting", "Learning an instrument"]
+  },
+  {
+    "id": 34,
+    "prompt": "I've told a white lie to get out of plans.",
+    "options": ["True", "False"]
+  },
+  {
+    "id": 35,
+    "prompt": "Which commute sounds nicest?",
+    "options": ["Walk or bike", "Short drive", "Train or bus with a seat", "Work from home"]
   }
 ]
