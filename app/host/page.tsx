@@ -4,14 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import { socket } from "../../lib/socket";
 
-// ✅ Reusable dedup helper — keeps the LAST seen version of each player
 function dedupePlayers<T extends { id: string }>(players: T[]): T[] {
   return Array.from(
     new Map(players.map((p) => [p.id, p])).values()
   );
 }
 
-// ✅ Normalize every room object before it touches state
 function normalizeRoom(room: any) {
   if (!room) return room;
   return {
@@ -29,7 +27,6 @@ export default function HostPage() {
     }
 
     const handleRoomUpdate = (updatedRoom: any) => {
-      // ✅ Deduplicate before storing — nothing downstream ever sees dupes
       setRoom(normalizeRoom(updatedRoom));
     };
 
@@ -43,7 +40,6 @@ export default function HostPage() {
   const createRoom = () => {
     socket.emit("host:create-room", { hostName: "Host" }, (res: any) => {
       if (res.ok) {
-        // ✅ Also normalize the initial room from the callback
         setRoom(normalizeRoom(res.room));
       }
     });
