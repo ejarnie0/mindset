@@ -15,8 +15,8 @@ const io = new Server(server, {
 const rooms = {};
 
 const WIN_SCORE = 10;
-const ANSWER_TIME = 15;
-const GUESS_TIME = 15;
+const ANSWER_TIME = 60;
+const GUESS_TIME = 60;
 function makeCode() {
   return Math.random().toString(36).substring(2, 6).toUpperCase();
 }
@@ -293,6 +293,21 @@ function startNextRound(room) {
   });
 }
 
+function resetGame(room) {
+  clearRoomTimer(room);
+
+  room.players.forEach((player) => {
+    player.score = 0;
+  });
+
+  room.status = "lobby";
+  room.round = null;
+  room.nextRoundReady = {};
+  room.usedQuestionIds = [];
+  room.roundCounter = 0;
+  resetAnswerOrder(room);
+}
+
 function finishRound(room) {
   if (!room.round) return;
   if (room.round.revealed) return;
@@ -321,19 +336,10 @@ function finishRound(room) {
     };
   });
 
-  const answeringPlayerPoints = guessResults.filter((r) => !r.wasCorrect).length;
-
-  const answeringPlayer = room.players.find(
-    (p) => p.id === room.round.answeringPlayerId && !p.isHost
-  );
-  if (answeringPlayer && answeringPlayerPoints > 0) {
-    answeringPlayer.score += answeringPlayerPoints;
-  }
-
   room.round.results = {
     correctAnswerIndex: correct,
     guessResults,
-    answeringPlayerPoints,
+    answeringPlayerPoints: 0,
   };
 
   if (getWinner(room)) {
@@ -388,9 +394,24 @@ io.on("connection", (socket) => {
     const room = rooms[code];
     if (!room) return callback({ ok: false, error: "Room not found" });
 
+    const trimmedName = String(name || "").trim();
+    if (!trimmedName) {
+      return callback({ ok: false, error: "Please enter a valid name." });
+    }
+
+    const nameTaken = room.players.some(
+      (p) => !p.isHost && p.name.toLowerCase() === trimmedName.toLowerCase()
+    );
+    if (nameTaken) {
+      return callback({
+        ok: false,
+        error: "Name already in this lobby, please choose a different name",
+      });
+    }
+
     room.players.push({
       id: socket.id,
-      name,
+      name: trimmedName,
       score: 0,
       isHost: false,
     });
@@ -518,6 +539,21 @@ io.on("connection", (socket) => {
     }
 
     startNextRound(room);
+  });
+
+  socket.on("game:play-again", ({ code }, callback) => {
+    const room = rooms[code];
+    if (!room) return callback?.({ ok: false, reason: "no-room" });
+    if (socket.id !== room.hostId) {
+      return callback?.({ ok: false, reason: "host-only" });
+    }
+    if (!getWinner(room)) {
+      return callback?.({ ok: false, reason: "game-not-finished" });
+    }
+
+    resetGame(room);
+    callback?.({ ok: true });
+    emitRoom(room);
   });
 
   socket.on("disconnect", () => {

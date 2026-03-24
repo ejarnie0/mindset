@@ -4,12 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { socket } from "../../../lib/socket";
 import { useParams } from "next/navigation";
 
-function sortPlayersByScore(players: any[]) {
-  return [...players]
-    .filter((p) => !p.isHost)
-    .sort((a, b) => b.score - a.score);
-}
-
 export default function PlayerRoomPage() {
   const params = useParams();
 
@@ -119,8 +113,6 @@ export default function PlayerRoomPage() {
 
   const winner = room.winner;
 
-  const scoreboardPlayers = sortPlayersByScore(room.players ?? []);
-
   const isChooserThisRound = room.round?.answeringPlayerId === effectivePlayerId;
   const myGuessResult = room.round?.results?.guessResults?.find(
     (r: any) => r.playerId === effectivePlayerId
@@ -192,28 +184,64 @@ export default function PlayerRoomPage() {
 
   const timerPercent =
     typeof room.timeLeft === "number"
-      ? `${Math.max(0, Math.min(100, (room.timeLeft / 15) * 100))}%`
+      ? `${Math.max(0, Math.min(100, (room.timeLeft / 60) * 100))}%`
       : "0%";
 
   return (
     <main className="min-h-screen bg-[#97E7F5] p-4">
       <div className="max-w-lg mx-auto rounded-[28px] bg-white border-4 border-[#01377D] p-6 shadow-[0_12px_0_#01377D]">
         <div className="flex items-center justify-between mb-4 gap-3">
-          <h1 className="text-3xl font-black text-[#01377D]">Mindset</h1>
+          <h1 className="text-3xl font-black text-[#01377D]">
+            {room.round
+              ? `Question ${room.round.roundId ?? room.roundCounter ?? 1}`
+              : "Mindset"}
+          </h1>
           <div className="rounded-full bg-[#7ED348] px-4 py-2 font-bold text-[#01377D]">
             {room.code}
           </div>
         </div>
 
-        {currentPlayer && (
-          <div className="mb-3 rounded-2xl bg-[#EAFBFE] px-4 py-3 text-[#01377D] font-bold">
-            You are: {currentPlayer.name}
+        {room.round && (
+          <div className="rounded-2xl bg-[#EAFBFE] p-5 mb-3 border-2 border-[#97E7F5]">
+            <p className="mb-2 text-sm font-black uppercase tracking-[0.15em] text-[#01377D]/75">
+              Question
+            </p>
+            <p className="text-[#01377D] text-lg font-bold">
+              {room.round.question.prompt}
+            </p>
           </div>
         )}
 
         {room.round && (
-          <div className="mb-3 rounded-2xl bg-[#EAFBFE] px-4 py-3 text-[#01377D] font-bold">
+          <div className="mb-3 rounded-2xl bg-[#01377D] px-4 py-3 text-white font-bold">
             Current chooser: {answeringPlayer?.name || "Unknown"}
+          </div>
+        )}
+
+        {room.status === "intermission" && room.round?.results && (
+          <div
+            className={`mb-3 rounded-2xl border-2 p-4 font-bold ${
+              isChooserThisRound
+                ? "border-[#009DD1] bg-[#EAFBFE] text-[#01377D]"
+                : myGuessResult?.wasCorrect
+                  ? "border-[#26B170] bg-[#26B170] text-white"
+                  : "border-[#01377D] bg-white text-[#01377D]"
+            }`}
+          >
+            <p className="text-sm font-black uppercase tracking-wide opacity-80 mb-1">
+              Your round
+            </p>
+            {isChooserThisRound ? (
+              <p>You were the chooser this round.</p>
+            ) : myGuessResult ? (
+              myGuessResult.wasCorrect ? (
+                      <p>Correct! +1 point!</p>
+              ) : (
+                <p>No point this round — your guess didn&apos;t match.</p>
+              )
+            ) : (
+              <p>You didn&apos;t guess this round.</p>
+            )}
           </div>
         )}
 
@@ -245,29 +273,15 @@ export default function PlayerRoomPage() {
 
         {room.round && (
           <>
-            <div className="mb-3 rounded-2xl bg-[#01377D] px-4 py-3 text-white font-bold">
-              {room.status === "intermission" ? (
-                <>
-                  Between rounds
-                  <br />
-                  {room.readyCount ?? 0} / {room.readyTotal ?? 0} players ready
-                </>
-              ) : (
-                <>
-                  Phase: {room.status}
-                  <br />
-                  {room.status === "answering"
-                    ? `${room.submittedCount || 0} / 1 answered`
-                    : `${room.submittedCount || 0} / ${room.totalGuessers || 0} guessed`}
-                </>
-              )}
-            </div>
-
-            <div className="rounded-2xl bg-[#EAFBFE] p-5 mb-4 border-2 border-[#97E7F5]">
-              <p className="text-[#01377D] text-lg font-bold">
-                {room.round.question.prompt}
-              </p>
-            </div>
+            {room.status !== "intermission" && (
+              <div className="mb-3 rounded-2xl bg-[#01377D] px-4 py-3 text-white font-bold">
+                Phase: {room.status}
+                <br />
+                {room.status === "answering"
+                  ? `${room.submittedCount || 0} / 1 answered`
+                  : `${room.submittedCount || 0} / ${room.totalGuessers || 0} guessed`}
+              </div>
+            )}
 
             {room.status === "answering" && isAnsweringPlayer && (
               <>
@@ -352,69 +366,14 @@ export default function PlayerRoomPage() {
 
             {room.status === "intermission" && room.round.results && (
               <div className="mt-2 space-y-4">
-                <div
-                  className={`rounded-2xl border-2 p-4 font-bold ${
-                    isChooserThisRound
-                      ? "border-[#009DD1] bg-[#EAFBFE] text-[#01377D]"
-                      : myGuessResult?.wasCorrect
-                        ? "border-[#26B170] bg-[#26B170] text-white"
-                        : "border-[#01377D] bg-white text-[#01377D]"
-                  }`}
-                >
-                  <p className="text-sm font-black uppercase tracking-wide opacity-80 mb-1">
-                    Your round
-                  </p>
-                  {isChooserThisRound ? (
-                    (room.round.results.answeringPlayerPoints ?? 0) > 0 ? (
-                      <p>
-                        You fooled {room.round.results.answeringPlayerPoints} player
-                        {room.round.results.answeringPlayerPoints === 1 ? "" : "s"} and
-                        earned +{room.round.results.answeringPlayerPoints}{" "}
-                        point
-                        {room.round.results.answeringPlayerPoints === 1 ? "" : "s"}!
-                      </p>
-                    ) : (
-                      <p>
-                        Everyone guessed your pick (or matched it). No fool points this
-                        round — guessers still earn +1 when they&apos;re right.
-                      </p>
-                    )
-                  ) : myGuessResult ? (
-                    myGuessResult.wasCorrect ? (
-                      <p>You guessed correctly and earned +1 point!</p>
-                    ) : (
-                      <p>No point this round — your guess didn&apos;t match.</p>
-                    )
-                  ) : (
-                    <p>You didn&apos;t guess this round.</p>
-                  )}
-                </div>
-
                 <div className="rounded-2xl bg-[#7ED348] p-4 text-[#01377D] font-bold">
                   Correct answer:{" "}
                   {room.round.question.options[room.round.results.correctAnswerIndex]}
                 </div>
 
-                <div className="rounded-2xl bg-[#01377D] p-4 text-white">
-                  <p className="text-sm font-black uppercase tracking-wide opacity-80 mb-2">
-                    Scores
-                  </p>
-                  <ul className="space-y-2 font-bold">
-                    {scoreboardPlayers.map((p: any) => (
-                      <li
-                        key={p.id}
-                        className="flex justify-between gap-3 border-b border-white/20 pb-2 last:border-0 last:pb-0"
-                      >
-                        <span>{p.name}</span>
-                        <span>{p.score} pts</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {room.round.results.guessResults.map((r: any) => (
+                {room.round.results.guessResults.map((r: any, index: number) => (
                   <div
-                    key={r.playerId}
+                    key={`${r.playerId}-${index}`}
                     className={`rounded-2xl p-4 font-bold ${
                       r.wasCorrect
                         ? "bg-[#26B170] text-white"

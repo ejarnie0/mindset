@@ -54,6 +54,11 @@ export default function HostPage() {
     socket.emit("game:start-round", { code: room.code });
   };
 
+  const playAgain = () => {
+    if (!room) return;
+    socket.emit("game:play-again", { code: room.code });
+  };
+
   const leaderboardPlayers = useMemo(() => {
     if (!room?.players) return [];
     return dedupePlayers(room.players.filter((p: any) => !p.isHost)).sort(
@@ -71,14 +76,8 @@ export default function HostPage() {
     for (const gr of room.round.results.guessResults) {
       if (gr.wasCorrect) lines.push(`${gr.name} got a point!`);
     }
-    const fooled = room.round.results.answeringPlayerPoints ?? 0;
-    const chooserName = answeringPlayer?.name;
-    if (fooled > 0 && chooserName) {
-      if (fooled === 1) lines.push(`${chooserName} got a point!`);
-      else lines.push(`${chooserName} got ${fooled} points!`);
-    }
     return lines;
-  }, [room?.round?.results, answeringPlayer?.name]);
+  }, [room?.round?.results]);
 
   const getStatusLabel = () => {
     if (!room) return "";
@@ -155,6 +154,12 @@ export default function HostPage() {
                 <p className="mt-2 text-3xl font-black md:text-4xl">
                   {room.winner.name} reached 10 points
                 </p>
+                <button
+                  onClick={playAgain}
+                  className="mt-5 rounded-2xl bg-white px-6 py-3 text-lg font-black text-[#01377D] shadow-[0_6px_0_#01377D] transition hover:-translate-y-0.5 active:translate-y-1 active:shadow-[0_2px_0_#01377D]"
+                >
+                  Play Again
+                </button>
               </div>
             )}
 
@@ -212,26 +217,39 @@ export default function HostPage() {
 
             <div className="space-y-3">
               {leaderboardPlayers.map((player: any, index: number) => (
+                (() => {
+                  const isWinner = room?.winner?.id === player.id;
+                  return (
                 <motion.div
                   layout
                   key={player.id}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.22 }}
-                  className="flex items-center justify-between rounded-2xl bg-white/10 p-4"
+                  className={`flex items-center justify-between rounded-2xl p-4 ${
+                    isWinner ? "bg-[#26B170] text-white" : "bg-white/10"
+                  }`}
                 >
                   <div>
-                    <p className="text-sm opacity-80">#{index + 1}</p>
+                    <p className={`text-sm ${isWinner ? "opacity-95" : "opacity-80"}`}>
+                      #{index + 1}
+                    </p>
                     <p className="text-xl font-bold">{player.name}</p>
                   </div>
 
                   <motion.div
                     layout
-                    className="rounded-full bg-[#7ED348] px-4 py-2 font-black text-[#01377D]"
+                    className={`rounded-full px-4 py-2 font-black ${
+                      isWinner
+                        ? "bg-white text-[#26B170]"
+                        : "bg-[#7ED348] text-[#01377D]"
+                    }`}
                   >
                     {player.score}
                   </motion.div>
                 </motion.div>
+                  );
+                })()
               ))}
             </div>
 
@@ -263,7 +281,9 @@ export default function HostPage() {
                 </p>
 
                 <div className="space-y-2">
-                  {room.players.map((player: any) => (
+                  {room.players
+                    .filter((player: any) => !player.isHost)
+                    .map((player: any) => (
                     <motion.div
                       layout
                       key={player.id}
@@ -274,7 +294,7 @@ export default function HostPage() {
                     >
                       {player.name}
                     </motion.div>
-                  ))}
+                    ))}
                 </div>
               </div>
             )}
